@@ -1180,7 +1180,7 @@ let CONNECTIONS=[
     "toSide": "right"
   }
 ];
-let nextStepId=10, nextConnId=11;
+let nextStepId=999, nextConnId=999;
 
 const INIT_BADGES={};STEPS.forEach(s=>INIT_BADGES[s.id]=s.badge);
 let _lastSummary='';
@@ -1191,10 +1191,18 @@ TAB_DATA[activeTab].nextStepId=nextStepId;
 TAB_DATA[activeTab].nextConnId=nextConnId;
 
 backfillOriginalGrid();
+recomputeNextStepId();
+recomputeNextConnId();
 
 function rebuildInitBadges(){
   Object.keys(INIT_BADGES).forEach(k=>delete INIT_BADGES[k]);
   STEPS.forEach(s=>INIT_BADGES[s.id]=s.badge);
+}
+function recomputeNextStepId(){
+  nextStepId = STEPS.length ? Math.max(...STEPS.map(s=>Number(s.id)||0)) + 1 : 1;
+}
+function recomputeNextConnId(){
+  nextConnId = CONNECTIONS.length ? Math.max(...CONNECTIONS.map(c=>Number(c.id)||0)) + 1 : 1;
 }
 function saveActiveTabState(){
   TAB_DATA[activeTab].steps=JSON.parse(JSON.stringify(STEPS));
@@ -1211,8 +1219,8 @@ function loadTab(tabId){
   activeTab=tabId;
   STEPS=JSON.parse(JSON.stringify(TAB_DATA[tabId].steps));
   CONNECTIONS=JSON.parse(JSON.stringify(TAB_DATA[tabId].connections));
-  nextStepId=TAB_DATA[tabId].nextStepId;
-  nextConnId=TAB_DATA[tabId].nextConnId;
+  recomputeNextStepId();
+  recomputeNextConnId();
   Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
   Object.assign(USER_COL_W, TAB_DATA[tabId].userColW||{});
   Object.keys(USER_ROW_H).forEach(k=>delete USER_ROW_H[k]);
@@ -1409,6 +1417,8 @@ function restoreSnapshot(snap){
   CONNECTIONS=snap.conns;
   nextStepId=snap.nextStepId;
   nextConnId=snap.nextConnId;
+  recomputeNextStepId();
+  recomputeNextConnId();
   S.agreed=new Set(snap.agreed||[]);
   S.customBadges=snap.customBadges||[];
   Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
@@ -2459,6 +2469,8 @@ window.applyEdit=()=>{
   ensureOriginalGrid(s);
   clampStep(s);
   S.sel=null;editDraft=null;_cbLabel='';
+  document.getElementById('drawer')?.classList.remove('open');
+  document.getElementById('drawer-backdrop')?.classList.remove('show');
   render();
   saveMapStateDebounced();
 };
@@ -2516,7 +2528,11 @@ window.submitAdd=()=>{
   if(!name){document.getElementById('add-name')?.focus();return;}
   const pos=newStepPos(addDraft.lane,addDraft.phase);
   STEPS.push({id:nextStepId,name,desc:addDraft.desc||'',l4id:addDraft.l4id||'',stepNum:addDraft.stepNum||'',lane:addDraft.lane,phase:addDraft.phase,badge:addDraft.badge,fillType:addDraft.fillType,nodeType:addDraft.nodeType||'rect',status:addDraft.status||'Open',stateType:addDraft.stateType||'future',originalLane:addDraft.lane,originalPhase:addDraft.phase,...pos});
-  nextStepId++;S.showAdd=false;render();
+  recomputeNextStepId();
+  S.showAdd=false;
+  document.getElementById('drawer')?.classList.remove('open');
+  document.getElementById('drawer-backdrop')?.classList.remove('show');
+  render();
   saveMapStateDebounced();
 };
 
@@ -2931,8 +2947,8 @@ function applyPayload(p){
     const at=TAB_DATA[activeTab];
     STEPS=JSON.parse(JSON.stringify(at.steps||[]));
     CONNECTIONS=JSON.parse(JSON.stringify(at.connections||[]));
-    nextStepId=at.nextStepId||15;
-    nextConnId=at.nextConnId||13;
+    recomputeNextStepId();
+    recomputeNextConnId();
     Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
     Object.assign(USER_COL_W,at.userColW||{});
     Object.keys(USER_ROW_H).forEach(k=>delete USER_ROW_H[k]);
@@ -2941,8 +2957,8 @@ function applyPayload(p){
   }else{
     STEPS=p.steps||[];
     CONNECTIONS=p.connections||[];
-    nextStepId=p.nextStepId||15;
-    nextConnId=p.nextConnId||13;
+    recomputeNextStepId();
+    recomputeNextConnId();
     S.locked=!!p.locked;
     Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
     Object.assign(USER_COL_W,p.userColW||{});
@@ -2951,6 +2967,8 @@ function applyPayload(p){
   }
 
   backfillOriginalGrid();
+  recomputeNextStepId();
+  recomputeNextConnId();
   rebuildInitBadges();
   S.agreed=new Set(p.agreed||[]);
   S.customBadges=p.customBadges||[];
