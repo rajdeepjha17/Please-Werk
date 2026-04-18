@@ -218,6 +218,8 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
   <div class="l3-tabs" id="l3-tab-bar"><button class="l3-tab " onclick="loadTab('nba_recommendation')"><span class="l3-tab-num">1</span>NBA Recommendation</button><button class="l3-tab " onclick="loadTab('dynamic_call_planning')"><span class="l3-tab-num">2</span>Dynamic Call Planning &amp; Prioritisation</button><button class="l3-tab " onclick="loadTab('journey_stage_mapping')"><span class="l3-tab-num">3</span>Customer Journey Stage Mapping</button><button class="l3-tab " onclick="loadTab('voc_capture_synthesis')"><span class="l3-tab-num">4</span>VoC Capture &amp; Synthesis</button><button class="l3-tab active" onclick="loadTab('channel_strategy')"><span class="l3-tab-num">5</span>Channel &amp; Engagement Strategy Optimisation</button></div>
 </div>
 
+<div id="global-lock-banner" style="display:none;background:#FEF3C7;color:#92400E;padding:6px 12px;font-size:12px;font-weight:600;text-align:center;border-bottom:1px solid #FCD34D">🔒 This tab is locked for all collaborators</div>
+
 <!-- ── Main area: diagram fills width ── -->
 <div class="page">
   <div class="card" id="ctrl-card" style="margin-bottom:8px">
@@ -766,7 +768,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
           </label>
         </div>
       </div>
-      <textarea id="fbt" class="notes" placeholder="Capture decisions, open items, client questions…" oninput="debounceSave()"></textarea>
+      <textarea id="fbt" class="notes" placeholder="Capture decisions, open items, client questions…" oninput="if(S.locked)return;debounceSave()"></textarea>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:6px">
         <span id="fstat" style="font-size:11px;color:#aaa">1 OOTB · 7 Config · 0 Gap-CS · 1 Gap-NS · 9 steps · 10 conns  |  0 Agreed · 0 In Review · 8 Open</span>
         <div style="display:flex;gap:6px">
@@ -1200,7 +1202,7 @@ function saveActiveTabState(){
   TAB_DATA[activeTab].nextStepId=nextStepId;
   TAB_DATA[activeTab].nextConnId=nextConnId;
   TAB_DATA[activeTab].userColW=JSON.parse(JSON.stringify(USER_COL_W));
-  TAB_DATA[activeTab].userRowH=Object.fromEntries(Object.entries(USER_ROW_H));
+  TAB_DATA[activeTab].userRowH=JSON.parse(JSON.stringify(USER_ROW_H));
   TAB_DATA[activeTab].locked=S.locked;
 }
 function loadTab(tabId){
@@ -1320,6 +1322,7 @@ function saveMapStateDebounced(){
   firebaseSaveTimer=setTimeout(()=>{
     try{
       const payload=buildPayload();
+      delete payload.activeTab;
       payload.lastEditor=editorName;
       payload.syncedAt=Date.now();
       firebaseMapRef.set(payload)
@@ -1349,7 +1352,9 @@ function initializeSharedMap(){
   if(!firebaseMapRef) return;
   firebaseMapRef.once('value', snapshot=>{
     if(!snapshot.exists()){
-      return firebaseMapRef.set({...buildPayload(), lastEditor:editorName, syncedAt:Date.now()})
+      const initialPayload={...buildPayload(), lastEditor:editorName, syncedAt:Date.now()};
+      delete initialPayload.activeTab;
+      return firebaseMapRef.set(initialPayload)
         .then(()=>{ firebaseLoaded=true; subscribeToRealtimeUpdates(); });
     }
     firebaseLoaded=true;
@@ -1387,7 +1392,7 @@ function snapshot(){
     agreed:[...S.agreed],
     customBadges:JSON.parse(JSON.stringify(S.customBadges)),
     userColW:JSON.parse(JSON.stringify(USER_COL_W)),
-    userRowHEntries:Object.entries(USER_ROW_H),
+    userRowH:JSON.parse(JSON.stringify(USER_ROW_H)),
     spotPhases:[...S.spotPhases],
     spotLanes:[...S.spotLanes],
     showGridPos:S.showGridPos,
@@ -1416,18 +1421,22 @@ function restoreSnapshot(snap){
   const fbt=document.getElementById('fbt'); if(fbt) fbt.value=snap.notes||'';
 }
 window.undo=()=>{
+  if(S.locked)return;
   if(!undoStack.length)return;
   redoStack.push(snapshot());
   restoreSnapshot(undoStack.pop());
   S.sel=null; S.selConn=null; S.multiSel=new Set(); editDraft=null; S.showAdd=false; S.confirmDelete=false;
   render();
+  saveMapStateDebounced();
 };
 window.redo=()=>{
+  if(S.locked)return;
   if(!redoStack.length)return;
   undoStack.push(snapshot());
   restoreSnapshot(redoStack.pop());
   S.sel=null; S.selConn=null; S.multiSel=new Set(); editDraft=null; S.showAdd=false; S.confirmDelete=false;
   render();
+  saveMapStateDebounced();
 };
 
 /* ══════════════════════════════════════════════════════
@@ -1652,9 +1661,10 @@ function clearPreview(){
   if(pl)pl.innerHTML='';
 }
 window.resetBend=(cid)=>{
+  if(S.locked)return;
   const c=CONNECTIONS.find(x=>x.id===cid);
   if(!c)return;
-  pushUndo(); c.bend=0; c.bend2=0; render();
+  pushUndo(); c.bend=0; c.bend2=0; render(); saveMapStateDebounced();
 };
 window.toggleGridPos=()=>{
   S.showGridPos=!S.showGridPos;
@@ -1666,7 +1676,7 @@ window.toggleLock=()=>{
   S.locked=!S.locked;
   saveActiveTabState();
   render();
-  debounceSave();
+  saveMapStateDebounced();
 };
 
 function todayStr(){return new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}
@@ -1736,7 +1746,7 @@ function renderCtrl(){
       <button class="btn ${S.showStatus?'on':''}" onclick="togStatus()">${S.showStatus?'&#x2713;&thinsp;':''}Status</button>
       <span style="width:1px;height:16px;background:var(--border);margin:0 4px;display:inline-block"></span>
       <button class="btn ${S.mode==='connect'?'connect-on':''}" onclick="toggleConnectMode()">&#x2192; ${S.mode==='connect'?'Exit connect':'Connect steps'}</button>
-      <button class="btn" onclick="openAdd()">&#x2295; Add step</button>
+      <button class="btn" onclick="openAdd()" ${S.locked?'style="opacity:.4;cursor:not-allowed" disabled':''}>&#x2295; Add step</button>
       ${connDel}
     </div>
     <div class="hint">${S.mode==='connect'
@@ -2304,6 +2314,8 @@ function updateTopbar(){
 
 function render(){
   updateTopbar();
+  const lockBanner=document.getElementById('global-lock-banner');
+  if(lockBanner)lockBanner.style.display=S.locked?'block':'none';
   recomputePhaseCols();
   recomputeLaneBounds();
   renderBackground();
@@ -2313,6 +2325,8 @@ function render(){
   redrawConns();
   renderEditPanel();
   renderAddPanel();
+  const notesEl=document.getElementById('fbt');
+  if(notesEl)notesEl.disabled=!!S.locked;
   updSummary();
 }
 
@@ -2428,6 +2442,7 @@ window.setAddFill=ft=>{addDraft.fillType=ft;renderAddPanel();};
 window.setAddBadge=b=>{addDraft.badge=b;renderAddPanel();};
 
 window.applyEdit=()=>{
+  if(S.locked)return;
   if(!editDraft)return;
   pushUndo();
   const s=STEPS.find(x=>x.id===editDraft._id);if(!s)return;
@@ -2456,6 +2471,7 @@ window.closeEdit=()=>{
 };
 
 window.confirmDeleteStep=id=>{
+  if(S.locked)return;
   pushUndo();
   STEPS=STEPS.filter(s=>s.id!==id);
   CONNECTIONS=CONNECTIONS.filter(c=>c.from!==id&&c.to!==id);
@@ -2463,12 +2479,14 @@ window.confirmDeleteStep=id=>{
   saveMapStateDebounced();
 };
 window.removeConn=id=>{
+  if(S.locked)return;
   pushUndo();
   CONNECTIONS=CONNECTIONS.filter(c=>c.id!==id);
   renderEditPanel();redrawConns();
   saveMapStateDebounced();
 };
 window.toggleConnDash=id=>{
+  if(S.locked)return;
   const c=CONNECTIONS.find(x=>x.id===id);
   if(c){pushUndo();c.dashed=!c.dashed;renderEditPanel();redrawConns();saveMapStateDebounced();}
 };
@@ -2480,6 +2498,7 @@ window.setConnLabel=( id,val)=>{
 window.toggleAgreed=id=>{pushUndo();S.agreed.has(id)?S.agreed.delete(id):S.agreed.add(id);S.sel=null;render();saveMapStateDebounced();};
 
 window.openAdd=()=>{
+  if(S.locked)return;
   S.showAdd=true;S.sel=null;S.multiSel.clear();editDraft=null;S.showCustomForm=false;
   addDraft={name:'',desc:'',lane:'Sales Rep',phase:'Insight processing',badge:'OOTB',fillType:'process'};
   render();
@@ -2491,6 +2510,7 @@ window.closeAdd=()=>{
   render();
 };
 window.submitAdd=()=>{
+  if(S.locked)return;
   const name=(addDraft.name||'').trim();
   pushUndo();
   if(!name){document.getElementById('add-name')?.focus();return;}
@@ -2557,6 +2577,7 @@ function showConnPicker(pc,mouseEvt){
   pk.style.left=x+'px'; pk.style.top=y+'px'; pk.style.display='block';
 }
 window.commitConn=dashed=>{
+  if(S.locked)return;
   const pc=S.pendingConn; if(!pc)return;
   if(!CONNECTIONS.find(c=>c.from===pc.from&&c.to===pc.to&&c.fromSide===pc.fromSide&&c.toSide===pc.toSide)){
     pushUndo();
@@ -2717,9 +2738,10 @@ window.startConnElbow=(e,connId,handleNum)=>{
     startBend:h===1?(c.bend||0):(c.bend2||0),handleNum:h,movesH};
 };
 window.deleteConnInline=id=>{
+  if(S.locked)return;
   pushUndo();
   CONNECTIONS=CONNECTIONS.filter(c=>c.id!==id);
-  S.selConn=null;render();
+  S.selConn=null;render();saveMapStateDebounced();
 };
 window.startNodeResize=(e,stepId)=>{
   if(S.locked)return;
@@ -2815,7 +2837,7 @@ window.startNodeResize=(e,stepId)=>{
       }
       return;
     }
-    if(connElbowRes.active){connElbowRes.active=false;render();return;}
+    if(connElbowRes.active){connElbowRes.active=false;render();saveMapStateDebounced();return;}
     if(colRes.active){colRes.active=false;render();return;}
     if(rowRes.active){rowRes.active=false;render();return;}
     if(nodeRes.active){nodeRes.active=false;render();return;}
@@ -2871,7 +2893,7 @@ function buildPayload(){
       nextStepId:TAB_DATA[k].nextStepId,
       nextConnId:TAB_DATA[k].nextConnId,
       userColW:JSON.parse(JSON.stringify(TAB_DATA[k].userColW||{})),
-      userRowHEntries:Object.entries(TAB_DATA[k].userRowH||{}),
+      userRowH:JSON.parse(JSON.stringify(TAB_DATA[k].userRowH||{})),
       locked:!!TAB_DATA[k].locked,
     };
   });
@@ -2889,7 +2911,7 @@ function buildPayload(){
     stateView:S.stateView, showStepNums:S.showStepNums, showIds:S.showIds, showStatus:S.showStatus, statusFilter:S.statusFilter,
     showGridPos:S.showGridPos, locked:S.locked,
     userColW:JSON.parse(JSON.stringify(USER_COL_W)),
-    userRowHEntries:Object.entries(USER_ROW_H),
+    userRowH:JSON.parse(JSON.stringify(USER_ROW_H)),
     notes:document.getElementById('fbt')?.value||''
   };
 }
@@ -2904,7 +2926,7 @@ function applyPayload(p){
       TAB_DATA[k].nextStepId=p.tabData[k].nextStepId||1;
       TAB_DATA[k].nextConnId=p.tabData[k].nextConnId||1;
       TAB_DATA[k].userColW=JSON.parse(JSON.stringify(p.tabData[k].userColW||{}));
-      TAB_DATA[k].userRowH=Object.fromEntries(p.tabData[k].userRowHEntries || Object.entries(p.tabData[k].userRowH || {}));
+      TAB_DATA[k].userRowH=JSON.parse(JSON.stringify(p.tabData[k].userRowH||{}));
       TAB_DATA[k].locked=!!p.tabData[k].locked;
     });
     activeTab=(p.activeTab && TAB_DATA[p.activeTab])?p.activeTab:activeTab;
@@ -2916,7 +2938,7 @@ function applyPayload(p){
     Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
     Object.assign(USER_COL_W,at.userColW||{});
     Object.keys(USER_ROW_H).forEach(k=>delete USER_ROW_H[k]);
-    Object.assign(USER_ROW_H, Object.fromEntries(at.userRowHEntries || Object.entries(at.userRowH || {})));
+    Object.assign(USER_ROW_H,at.userRowH||{});
     S.locked=!!at.locked;
   }else{
     STEPS=p.steps||[];
@@ -2927,7 +2949,7 @@ function applyPayload(p){
     Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
     Object.assign(USER_COL_W,p.userColW||{});
     Object.keys(USER_ROW_H).forEach(k=>delete USER_ROW_H[k]);
-    Object.assign(USER_ROW_H, Object.fromEntries(p.userRowHEntries || Object.entries(p.userRowH || {})));
+    Object.assign(USER_ROW_H,p.userRowH||{});
   }
 
   backfillOriginalGrid();
@@ -3009,7 +3031,7 @@ window.exportHTML=()=>{
         nextStepId:TAB_DATA[k].nextStepId,
         nextConnId:TAB_DATA[k].nextConnId,
         userColW:JSON.parse(JSON.stringify(TAB_DATA[k].userColW||{})),
-        userRowHEntries:Object.entries(TAB_DATA[k].userRowH||{}),
+        userRowH:JSON.parse(JSON.stringify(TAB_DATA[k].userRowH||{})),
         locked:TAB_DATA[k].locked||false,
       };
     });
@@ -3088,7 +3110,7 @@ window._hasBakedState=true;
 })();
 renderTabBar();
 render();
-document.getElementById('fbt')?.addEventListener('input',()=>{debounceSave();saveMapStateDebounced();});
+document.getElementById('fbt')?.addEventListener('input',()=>{if(S.locked)return;debounceSave();saveMapStateDebounced();});
 initializeSharedMap();
 </script>
 
