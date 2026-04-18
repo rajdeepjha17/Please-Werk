@@ -1202,7 +1202,7 @@ function saveActiveTabState(){
   TAB_DATA[activeTab].nextStepId=nextStepId;
   TAB_DATA[activeTab].nextConnId=nextConnId;
   TAB_DATA[activeTab].userColW=JSON.parse(JSON.stringify(USER_COL_W));
-  TAB_DATA[activeTab].userRowH=JSON.parse(JSON.stringify(USER_ROW_H));
+  TAB_DATA[activeTab].userRowH=Object.fromEntries(Object.entries(USER_ROW_H));
   TAB_DATA[activeTab].locked=S.locked;
 }
 function loadTab(tabId){
@@ -1392,7 +1392,7 @@ function snapshot(){
     agreed:[...S.agreed],
     customBadges:JSON.parse(JSON.stringify(S.customBadges)),
     userColW:JSON.parse(JSON.stringify(USER_COL_W)),
-    userRowH:JSON.parse(JSON.stringify(USER_ROW_H)),
+    userRowHEntries:Object.entries(USER_ROW_H),
     spotPhases:[...S.spotPhases],
     spotLanes:[...S.spotLanes],
     showGridPos:S.showGridPos,
@@ -2893,13 +2893,12 @@ function buildPayload(){
       nextStepId:TAB_DATA[k].nextStepId,
       nextConnId:TAB_DATA[k].nextConnId,
       userColW:JSON.parse(JSON.stringify(TAB_DATA[k].userColW||{})),
-      userRowH:JSON.parse(JSON.stringify(TAB_DATA[k].userRowH||{})),
+      userRowHEntries:Object.entries(TAB_DATA[k].userRowH||{}),
       locked:!!TAB_DATA[k].locked,
     };
   });
   return{
     version:2,
-    activeTab,
     tabData,
     steps:JSON.parse(JSON.stringify(STEPS)),
     connections:JSON.parse(JSON.stringify(CONNECTIONS)),
@@ -2911,7 +2910,7 @@ function buildPayload(){
     stateView:S.stateView, showStepNums:S.showStepNums, showIds:S.showIds, showStatus:S.showStatus, statusFilter:S.statusFilter,
     showGridPos:S.showGridPos, locked:S.locked,
     userColW:JSON.parse(JSON.stringify(USER_COL_W)),
-    userRowH:JSON.parse(JSON.stringify(USER_ROW_H)),
+    userRowHEntries:Object.entries(USER_ROW_H),
     notes:document.getElementById('fbt')?.value||''
   };
 }
@@ -2926,10 +2925,9 @@ function applyPayload(p){
       TAB_DATA[k].nextStepId=p.tabData[k].nextStepId||1;
       TAB_DATA[k].nextConnId=p.tabData[k].nextConnId||1;
       TAB_DATA[k].userColW=JSON.parse(JSON.stringify(p.tabData[k].userColW||{}));
-      TAB_DATA[k].userRowH=JSON.parse(JSON.stringify(p.tabData[k].userRowH||{}));
+      TAB_DATA[k].userRowH=Object.fromEntries(p.tabData[k].userRowHEntries || Object.entries(p.tabData[k].userRowH || {}));
       TAB_DATA[k].locked=!!p.tabData[k].locked;
     });
-    activeTab=(p.activeTab && TAB_DATA[p.activeTab])?p.activeTab:activeTab;
     const at=TAB_DATA[activeTab];
     STEPS=JSON.parse(JSON.stringify(at.steps||[]));
     CONNECTIONS=JSON.parse(JSON.stringify(at.connections||[]));
@@ -2938,7 +2936,7 @@ function applyPayload(p){
     Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
     Object.assign(USER_COL_W,at.userColW||{});
     Object.keys(USER_ROW_H).forEach(k=>delete USER_ROW_H[k]);
-    Object.assign(USER_ROW_H,at.userRowH||{});
+    Object.assign(USER_ROW_H, Object.fromEntries(at.userRowHEntries || Object.entries(at.userRowH || {})));
     S.locked=!!at.locked;
   }else{
     STEPS=p.steps||[];
@@ -2949,7 +2947,7 @@ function applyPayload(p){
     Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
     Object.assign(USER_COL_W,p.userColW||{});
     Object.keys(USER_ROW_H).forEach(k=>delete USER_ROW_H[k]);
-    Object.assign(USER_ROW_H,p.userRowH||{});
+    Object.assign(USER_ROW_H, Object.fromEntries(p.userRowHEntries || Object.entries(p.userRowH || {})));
   }
 
   backfillOriginalGrid();
@@ -3031,7 +3029,7 @@ window.exportHTML=()=>{
         nextStepId:TAB_DATA[k].nextStepId,
         nextConnId:TAB_DATA[k].nextConnId,
         userColW:JSON.parse(JSON.stringify(TAB_DATA[k].userColW||{})),
-        userRowH:JSON.parse(JSON.stringify(TAB_DATA[k].userRowH||{})),
+        userRowHEntries:Object.entries(TAB_DATA[k].userRowH||{}),
         locked:TAB_DATA[k].locked||false,
       };
     });
