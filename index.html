@@ -1219,8 +1219,8 @@ function loadTab(tabId){
   activeTab=tabId;
   STEPS=JSON.parse(JSON.stringify(TAB_DATA[tabId].steps));
   CONNECTIONS=JSON.parse(JSON.stringify(TAB_DATA[tabId].connections));
-  recomputeNextStepId();
-  recomputeNextConnId();
+  normalizeStepIds();
+  normalizeConnIds();
   Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
   Object.assign(USER_COL_W, TAB_DATA[tabId].userColW||{});
   Object.keys(USER_ROW_H).forEach(k=>delete USER_ROW_H[k]);
@@ -2526,9 +2526,10 @@ window.submitAdd=()=>{
   const name=(addDraft.name||'').trim();
   pushUndo();
   if(!name){document.getElementById('add-name')?.focus();return;}
+  normalizeStepIds();
   const pos=newStepPos(addDraft.lane,addDraft.phase);
   STEPS.push({id:nextStepId,name,desc:addDraft.desc||'',l4id:addDraft.l4id||'',stepNum:addDraft.stepNum||'',lane:addDraft.lane,phase:addDraft.phase,badge:addDraft.badge,fillType:addDraft.fillType,nodeType:addDraft.nodeType||'rect',status:addDraft.status||'Open',stateType:addDraft.stateType||'future',originalLane:addDraft.lane,originalPhase:addDraft.phase,...pos});
-  recomputeNextStepId();
+  normalizeStepIds();
   S.showAdd=false;
   document.getElementById('drawer')?.classList.remove('open');
   document.getElementById('drawer-backdrop')?.classList.remove('show');
@@ -2947,8 +2948,8 @@ function applyPayload(p){
     const at=TAB_DATA[activeTab];
     STEPS=JSON.parse(JSON.stringify(at.steps||[]));
     CONNECTIONS=JSON.parse(JSON.stringify(at.connections||[]));
-    recomputeNextStepId();
-    recomputeNextConnId();
+    normalizeStepIds();
+    normalizeConnIds();
     Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
     Object.assign(USER_COL_W,at.userColW||{});
     Object.keys(USER_ROW_H).forEach(k=>delete USER_ROW_H[k]);
@@ -2957,8 +2958,8 @@ function applyPayload(p){
   }else{
     STEPS=p.steps||[];
     CONNECTIONS=p.connections||[];
-    recomputeNextStepId();
-    recomputeNextConnId();
+    normalizeStepIds();
+    normalizeConnIds();
     S.locked=!!p.locked;
     Object.keys(USER_COL_W).forEach(k=>delete USER_COL_W[k]);
     Object.assign(USER_COL_W,p.userColW||{});
